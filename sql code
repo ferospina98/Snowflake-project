@@ -1,0 +1,122 @@
+CREATE DATABASE SUPPLY_CHAIN_DB;
+USE DATABASE SUPPLY_CHAIN_DB; 
+CREATE SCHEMA public;
+
+CREATE OR REPLACE TABLE public.OrderList (
+    OrderID STRING,
+    OrderDate DATE,
+    OriginPort STRING,
+    Carrier STRING,
+    TPTServiceLevel STRING,
+    ShipAheadDayCount NUMBER,
+    ShipLateDayCount NUMBER,
+    Customer STRING,
+    ProductID STRING,
+    PlantCode STRING,
+    DestinationPort STRING,
+    UnitQuantity NUMBER,
+    Weight NUMBER
+);
+
+CREATE OR REPLACE TABLE public.FreightRates (
+    Carrier STRING,
+    OrigPortCd STRING,
+    DestPortCd STRING,
+    MinmWghQty NUMBER,
+    MaxWghQty NUMBER,
+    SvcCd STRING,
+    MinimumCost NUMBER,
+    Rate NUMBER,
+    ModeDsc STRING,
+    TptDayCnt NUMBER,
+    CarrierType STRING
+);
+
+CREATE OR REPLACE TABLE public.WhCosts (
+    WH STRING,
+    CostPerUnit NUMBER
+);
+
+CREATE OR REPLACE TABLE public.WhCapacities (
+    PlantID STRING,
+    DailyCapacity NUMBER
+);
+
+CREATE OR REPLACE TABLE public.ProductsPerPlant (
+    PlantCode STRING,
+    ProductID STRING
+);
+
+CREATE OR REPLACE TABLE public.VmiCustomers (
+    PlantCode STRING,
+    Customers STRING
+);
+
+CREATE OR REPLACE TABLE public.PlantPorts (
+    PlantCode STRING,
+    Port STRING
+);
+
+CREATE OR REPLACE STAGE my_s3_stage
+URL ='s3://mysupply-bucket/'
+CREDENTIALS = (AWS_KEY_ID='AKIAZI2LHGGKRZUGH2RA' AWS_SECRET_KEY='NDSlzhGvsqLJWYNe3DMZxHraL6qYg55r+KUUq+le');
+
+CREATE OR REPLACE FILE FORMAT my_csv_format
+TYPE = 'CSV'
+FIELD_OPTIONALLY_ENCLOSED_BY = '"'
+SKIP_HEADER = 1
+ERROR_ON_COLUMN_COUNT_MISMATCH = FALSE
+NULL_IF = ('', 'CRF', 'DTP', 'PORT09');
+
+
+list @my_s3_stage;
+
+COPY INTO public.OrderList
+FROM @my_s3_stage/OrderList.csv
+FILE_FORMAT = (FORMAT_NAME = 'my_csv_format')
+ON_ERROR = 'CONTINUE';
+
+COPY INTO public.FreightRates
+FROM @my_s3_stage/FreightRates.csv
+FILE_FORMAT = (FORMAT_NAME = 'my_csv_format')
+ON_ERROR = 'CONTINUE';
+
+COPY INTO public.PlantPorts
+FROM @my_s3_stage/PlantPorts.csv
+FILE_FORMAT = (FORMAT_NAME = 'my_csv_format');
+
+COPY INTO public.ProductsPerPlant
+FROM @my_s3_stage/ProductsPerPlant.csv
+FILE_FORMAT = (FORMAT_NAME = 'my_csv_format');
+
+COPY INTO public.VmiCustomers
+FROM @my_s3_stage/VmiCustomers.csv
+FILE_FORMAT = (FORMAT_NAME = 'my_csv_format');
+
+COPY INTO public.WhCapacities
+FROM @my_s3_stage/WhCapacities.csv
+FILE_FORMAT = (FORMAT_NAME = 'my_csv_format');
+
+COPY INTO public.WhCosts
+FROM @my_s3_stage/WhCosts.csv
+FILE_FORMAT = (FORMAT_NAME = 'my_csv_format');
+
+SELECT PlantCode AS PlantCode, COUNT(ProductID) AS ProductCount
+FROM public.ProductsPerPlant
+GROUP BY PlantCode
+ORDER BY ProductCount DESC;
+
+SELECT PlantCode AS PlantCode, COUNT(ProductID) AS ProductCount
+FROM public.ProductsPerPlant
+GROUP BY PlantCode
+ORDER BY ProductCount DESC
+LIMIT 10;
+
+SELECT ProductID AS ProductID, COUNT(PlantCode) AS PlantCount
+FROM public.ProductsPerPlant
+GROUP BY ProductID
+ORDER BY PlantCount DESC;
+
+SELECT PlantCode AS PlantCode, ProductID AS ProductID
+FROM public.ProductsPerPlant
+ORDER BY PlantCode, ProductID;
